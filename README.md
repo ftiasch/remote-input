@@ -178,3 +178,7 @@ rm ~/.local/lib/fcitx5/remoteinput.so \
 - The server has no authentication: anyone on the same LAN / tailnet can type onto your
   screen. Put a token in front of it if you expose it beyond a trusted network.
 - One commit at a time; there are no "press Enter / Backspace / clear" actions.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
