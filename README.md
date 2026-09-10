@@ -141,16 +141,21 @@ GET  /             → the minimal web UI (src/remote_input/static/index.html)
 
 ## The phone page
 
-Three things: a text box, a `Send` button, and an `Auto-send N s` setting.
+Three things: a text box, a `Send` button, and a three-position `Off / 1 s / Instant` setting.
 
 - All controls sit in **one row at the top**, the text box takes the rest: a phone
   soft keyboard slides up from the bottom, so bottom-anchored controls get covered.
-- `0` (default): manual only, tap `Send`.
-- `N>0`: commit automatically N seconds after typing stops, then clear the box.
+  The setting is a segmented control rather than a number field, so it cannot be
+  nudged by a stray tap and does not raise a keyboard of its own.
+- `Off` (default): manual only, tap `Send`.
+- `1 s`: commit automatically one second after typing stops, then clear the box.
   A countdown is shown right below the controls row.
+- `Instant`: same, with the quiet period cut to 0.1 s — meant for dictation, where a
+  whole phrase lands at once. When typing by hand a word is committed at a time,
+  because the soft keyboard sends a word per composition.
 - Text is **not** committed while a mobile IME is composing; the timer only starts at
   `compositionend`, i.e. once the final text has settled.
-- The number is kept in the phone browser's localStorage, so it survives reloads.
+- The setting is kept in the phone browser's localStorage, so it survives reloads.
 - If a commit fails (e.g. no focused input context yet) the text stays in the box and is
   **not** retried automatically — click the target window on the desktop first, then tap
   `Send`.
