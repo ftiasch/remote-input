@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>remote input</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 1rem; font: 16px/1.5 system-ui, sans-serif;
+         background: #16161a; color: #e8e8ea; display: flex; flex-direction: column;
+         height: 100dvh; box-sizing: border-box; }
+  /* Every control lives in one row at the top: a phone soft keyboard slides up from
+     the bottom, so bottom-anchored controls would get covered. */
+  form { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: .75rem; }
+  .controls { display: flex; align-items: center; gap: .5rem; }
+  .setting { flex: 1; min-width: 0; display: flex; align-items: center; gap: .4rem;
+             font-size: .9rem; color: #9a9aa6; }
+  .setting input { width: 5ch; padding: .35rem .5rem; font: inherit; text-align: center;
+                   border-radius: .35rem; border: 1px solid #3a3a44; background: #1e1e24;
+                   color: inherit; }
+  .controls button { flex: none; padding: .7rem 1.25rem; font: inherit; font-weight: 600;
+                     border: 0; border-radius: .5rem; background: #4f7cff; color: white; }
+  .controls button:active { background: #3a63d8; }
+  #status { margin: 0; min-height: 1.5em; font-size: .9rem; color: #9a9aa6; }
+  textarea { flex: 1; min-height: 0; padding: .75rem; font: inherit; resize: none;
+             border-radius: .5rem; border: 1px solid #3a3a44; background: #1e1e24;
+             color: inherit; }
+</style>
+<body>
+<form id="form">
+  <div class="controls">
+    <label class="setting" for="delay"
+           title="Commit automatically N seconds after you stop typing; 0 turns it off">Auto-send
+      <input id="delay" type="number" min="0" step="0.5" inputmode="decimal">
+      s (0 = off)
+    </label>
+    <button>Send</button>
+  </div>
+  <p id="status"></p>
+  <textarea id="text" placeholder="Type or dictate here…" autofocus></textarea>
+</form>
+<script>
+"use strict";
+
+const form = document.getElementById("form");
+const text = document.getElementById("text");
+const delay = document.getElementById("delay");
+const status = document.getElementById("status");
+const DELAY_KEY = "remote-input.delay";
+
+let timer = null;      // last word of the quiet-period timer
+let ticker = null;     // countdown display
+let deadline = 0;
+let composing = false; // a mobile IME is composing text
+
+function remembered() {
+  try { return localStorage.getItem(DELAY_KEY); } catch { return null; }
+}
+
+function remember(value) {
+  try { localStorage.setItem(DELAY_KEY, value); } catch { /* private mode etc. */ }
+}
+
+function delaySeconds() {
+  const seconds = Number.parseFloat(delay.value);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+}
+
+function stopAuto() {
+  clearTimeout(timer);
+  clearInterval(ticker);
+  timer = ticker = null;
+}
+
+function tick() {
+  const left = Math.max(0, deadline - Date.now()) / 1000;
+  status.textContent = `Auto-send in ${left.toFixed(1)}s…`;
+}
+
+/** Commit delaySeconds() after typing stops; 0 seconds means no auto-send. */
+function schedule() {
+  stopAuto();
+  const seconds = delaySeconds();
+  if (!seconds || composing || !text.value) {
+    status.textContent = "";
+    return;
+  }
+  deadline = Date.now() + seconds * 1000;
+  timer = setTimeout(send, seconds * 1000);
+  ticker = setInterval(tick, 100);
+  tick();
+}
+
+async function send() {
+  stopAuto();
+  if (!text.value) return;
+  status.textContent = "Sending…";
+  try {
+    const response = await fetch("/api/commit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text.value }),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      status.textContent = result.error; // keep the text, never retry on its own
+    } else if (result.committed) {
+      status.textContent = "Sent";
+      text.value = "";
+    } else {
+      status.textContent = "No focused input field — click the target window on your computer first";
+    }
+  } catch (error) {
+    status.textContent = String(error);
+  }
+}
+
+form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  text.focus(); // the button sits at the top; keep the soft keyboard up for the next sentence
+  send();
+});
+
+text.addEventListener("input", () => {
+  if (!composing) schedule();
+});
+
+// Do not commit mid-composition: wait for compositionend, i.e. the settled text.
+text.addEventListener("compositionstart", () => {
+  composing = true;
+  stopAuto();
+});
+
+text.addEventListener("compositionend", () => {
+  composing = false;
+  schedule();
+});
+
+delay.value = remembered() ?? "0";
+delay.addEventListener("input", () => {
+  remember(delay.value);
+  schedule();
+});
+</script>
